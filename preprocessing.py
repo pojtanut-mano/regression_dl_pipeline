@@ -12,7 +12,28 @@ ECHELON = 1e-2
 class PreProcessing:
     """Preprocess data according to configuration file
 
+    Apply data preprocessing methods as listed below:
+        - fillNaN with the given value
+        - (Optional) normalize numerical value features
+        - (Optional) apply PCA transformation to reduce the dimension of features
+        - (Optional) apply BoxCox transformation to transform data into normal distribution-ish
 
+    Args:
+        X (pd.DataFrame): dataframe containing features
+        y (pd.DataFrame): vector containing target, in our case, it needs to be real positive values
+        config (dict): configuration dictionary
+        dir_name (str): location that lambda used in BoxCox transformation will be stored
+
+    Attributes:
+        X (pd.DataFrame): dataframe containing features
+        y (pd.DataFrame): vector containing target, in our case, it needs to be real positive values
+        config (dict): configuration dictionary
+        dir_name (str): location that lambda used in BoxCox transformation will be stored
+        X_dummy (pd.DataFrame): features dataframe after transforming categorical features into dummies
+        X_train (pd.DataFrame): dataframe containing features used in training step
+        y_train (pd.DataFrame): dataframe containing target used in training step
+        X_test (pd.DataFrame): dataframe containing features used in test step
+        y_test (pd.DataFrame): dataframe containing target used in test step
     """
     def __init__(self, X, y, config, dir_name):
         self.config = config
@@ -57,19 +78,26 @@ class PreProcessing:
         print(self.X_train.shape, self.X_test.shape, self.y_train.shape, self.y_test.shape)
 
     def find_complement(self, main_iter, sub_iter):
-        """
-        Return the elements in the list that aren't in the another list
+        """Return the elements in the list that aren't in the another list
 
-        :param:
-            main_list (iterable) - iterable containing elements that will be retained
-            sub_list  (iterable) - iterable containing elements that won't be included in result list
-        :return:
-            (list) - containing elements that aren't in the sub_list
+        Args:
+            main_iter (iterable): iterable containing elements that will be retained
+            sub_iter (iterable): iterable containing elements that won't be included in result list
+
+        Returns:
+            (list): containing elements that aren't in the sub_list
         """
         return [i for i in main_iter if i not in sub_iter]
 
     def fill_nan(self, df):
-        # Fill object cols with most occurences
+        """Fill object cols with most occurrences
+
+        Args:
+            df (pd.DataFrame): dataframe
+
+        Returns:
+            df (pd.DataFrame): fill dataframe with median or mean according to skewness of distribution
+        """
         for col in self.object_cols:
             temp_occur = df[col].value_counts().keys()[0]
             df[col] = df[col].fillna(temp_occur)
@@ -87,13 +115,13 @@ class PreProcessing:
         return df
 
     def normalize(self, df):
-        """
-        Transform each feature into distribution with mean 0 and variance 1
+        """Transform each feature into distribution with mean 0 and variance 1
 
-        :param
-            df (pd.DataFrame) - DataFrame containing features
-        :return:
-            df (pd.DataFrame) - transformed DataFrame
+        Args:
+            df (pd.DataFrame): DataFrame containing features
+
+        Returns:
+            df (pd.DataFrame): transformed DataFrame
         """
         scaler = StandardScaler()
         df[self.numeric_cols] = scaler.fit_transform(df[self.numeric_cols])
@@ -101,14 +129,14 @@ class PreProcessing:
         return df
 
     def PCA_transformation(self, X, threshold):
-        """
-        Select principal components with explained variance above the threshold
+        """Select principal components with explained variance above the threshold
 
-        :param:
-            X (pd.DataFrame) - DataFrame containing features
-            threshold (float) - value between 0 and 1
-        :return:
-            X (pd.DataFrame) - DataFrame that will be transformed
+        Args:
+            X (pd.DataFrame): DataFrame containing features
+            threshold (float): value between 0 and 1
+
+        Returns:
+            X (pd.DataFrame): DataFrame that will be transformed
         """
         for i in range(X.shape[1]):
             pca = PCA(n_components=i+1)
@@ -119,13 +147,13 @@ class PreProcessing:
                 return pd.DataFrame(principal_comp, columns=["principal component " + str(j) for j in range(1, i+2)])
 
     def BoxCox_transformation(self, y, dir_name):
-        """
-        Transform the target by BoxCox transformation which will transform the target into near normal distribution
+        """Transform the target by BoxCox transformation which will transform the target into near normal distribution
 
-        :param
-            y (pd.DataFrame) - target
-        :return:
-            y (np.ndarray) - transformed (normalized) target
+        Args:
+            y (pd.DataFrame): target
+
+        Returns:
+            y (np.ndarray): transformed (normalized) target
         """
         boxcox_transformer = PowerTransformer(method='box-cox')
         bc_y = boxcox_transformer.fit_transform(y)
@@ -134,11 +162,13 @@ class PreProcessing:
         return pd.DataFrame(bc_y, columns=['target'])
 
     def get_dummies(self, df):
-        """
-        Transform columns that are categorical variable into dummies variable
+        """Transform columns that are categorical variable into dummies variable
 
-        :param df: (pd.DataFrame) containing features
-        :return: df: (pd.DataFrame) containing features after transforming some of them into dummies
+        Args:
+            df: (pd.DataFrame) containing features
+
+        Returns:
+            df: (pd.DataFrame) containing features after transforming some of them into dummies
         """
         if not self.object_cols:
             print("There are no variables that are categorical variables\n"
@@ -149,16 +179,16 @@ class PreProcessing:
         return dummy_df
 
     def split_train_test(self, X, y):
-        """
-        Split dataset into train and test set
+        """Split dataset into train and test set
 
-        :param X: pd.DataFrame containing features
-        :param y: pd.DataFrame, np.ndarray containing target
-        :return:
-            X_train: (pd.DataFrame) train predictor variables
-            X_test: (pd.DataFrame) test predictor variables
-            y_train: (pd.DataFrame) train target
-            y_test: (pd.DataFrame) test target
+        Args:
+            X (pd.DataFrame): containing features
+            y (pd.DataFrame, np.ndarray): containing target
+        Returns:
+            X_train (pd.DataFrame): train predictor variables
+            X_test (pd.DataFrame): test predictor variables
+            y_train (pd.DataFrame): train target
+            y_test (pd.DataFrame): test target
         """
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=self.config['test_size'], random_state=self.config['seed'],
@@ -167,11 +197,10 @@ class PreProcessing:
         return X_train, X_test, y_train, y_test
 
     def get_dataset(self):
-        """
-        Return transformed dataset
+        """Return transformed dataset
 
-        :return:
-            X (pd.DataFrame) - transformed X
-            y (pd.DataFrame) - transformed y
+        Returns:
+            X (pd.DataFrame): transformed X
+            y (pd.DataFrame): transformed y
         """
         return self.X_train, self.X_test, self.y_train, self.y_test
