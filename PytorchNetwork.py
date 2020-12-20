@@ -1,7 +1,7 @@
 import torch
 from torch import nn, optim
 from torch.optim.lr_scheduler import StepLR
-
+from torchviz import make_dot
 
 class Net(nn.Module):
     """Create neural network placeholder
@@ -28,18 +28,16 @@ class Net(nn.Module):
 
     def forward(self, x):
         # First layer
-        x = self.fc1(x)
-        x = self.relu(x)
-        x = self.dropout1(x)
+        x = self.relu(self.fc1(x))
+        # x = self.dropout1(x)
 
         # Second layer
-        x = self.fc2(x)
-        x = self.relu(x)
-        x = self.dropout2(x)
+        x = self.relu(self.fc2(x))
+        # x = self.dropout2(x)
 
         # Output layer
         x = self.fc3(x)
-        return self.relu(x)
+        return x
 
 
 def within_15(y_true, y_pred):
@@ -75,20 +73,39 @@ def train(args, model, device, train_loader, optimizer, loss_fn, epoch):
         None
     """
     model.train()
-    for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
+    data_count = 0
+    count = 0
+    for data, target in train_loader:
         optimizer.zero_grad()
-        output = model(data)
+        model.zero_grad()
+
+        data, target = data.to(device), target.to(device)
+        data.requires_grad_(True)
+        output = model.forward(data)
+
         loss = loss_fn(output, target)
         loss.backward()
+
+        # Check result
+        # print(output[:2], target[:2])
+        # print('\n')
+
+        # Check gradients
+        # for name, param in model.named_parameters():
+        #     print(name, param.grad.abs().sum())
+        # print('\n')
+
         optimizer.step()
-        if batch_idx % args.log_interval == 0:
+
+        data_count += len(data)
+        if (count+1) % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.3f}'.format(
-                epoch, batch_idx*len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.item()
+                epoch, data_count, len(train_loader.dataset),
+                100. * data_count / len(train_loader.dataset), loss.item()
             ))
             if args.dry_run:
                 break
+        count += 1
 
 
 def test(model, device, loss_fn, test_loader):
@@ -106,22 +123,14 @@ def test(model, device, loss_fn, test_loader):
        """
     model.eval()
     test_loss = 0
-    correct = 0
+    acc = 0
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
             test_loss += loss_fn(output, target).item()
-            acc = within_15(target, output)
-            print(acc)
-        #     pred = output.argmax(dim=1, keepdim=True)
-        #     correct += pred.eq(target.view_as(pred)).sum().item()
-        #
-        # test_loss /= len(test_loader.dataset)
-        #
-        # print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-        #     test_loss, correct, len(test_loader.dataset),
-        #     100. * correct / len(test_loader.dataset)
-        # ))
+            acc += within_15(target, output)
+        print("Average test accuracy: {:.2f} %\tloss: {:.3f}\n".format(acc/len(test_loader), test_loss / len(test_loader)))
+
 
 

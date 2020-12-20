@@ -3,7 +3,7 @@ import numpy as np
 import pickle
 import os
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler, PowerTransformer
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.model_selection import train_test_split
 
 ECHELON = 1e-2
@@ -71,6 +71,9 @@ class PreProcessing:
         # Get dummy variables
         self.X_dummy = self.get_dummies(self.X)
 
+        # Scale y
+        self.y_scaled, self.y_scaler = self.transform_y(self.y)
+
         # Split train test
         self.X_train, self.X_test, self.y_train, self.y_test = self.split_train_test(
             self.X_dummy, self.y)
@@ -123,7 +126,7 @@ class PreProcessing:
         Returns:
             df (pd.DataFrame): transformed DataFrame
         """
-        scaler = StandardScaler()
+        scaler = MinMaxScaler()
         df[self.numeric_cols] = scaler.fit_transform(df[self.numeric_cols])
 
         return df
@@ -178,6 +181,19 @@ class PreProcessing:
         dummy_df = pd.get_dummies(df, columns=self.object_cols)
         return dummy_df
 
+    def transform_y(self, df):
+        """Transform targets by using Standardscaler
+
+        Args:
+            df (pd.DataFrame): contain targets
+        Returns:
+            df_scaled (pd.DataFrame): contain transformed targets
+        """
+        scaler = StandardScaler()
+        df_scaled = scaler.fit_transform(df)
+
+        return df_scaled, scaler
+
     def split_train_test(self, X, y):
         """Split dataset into train and test set
 
@@ -204,3 +220,11 @@ class PreProcessing:
             y (pd.DataFrame): transformed y
         """
         return self.X_train, self.X_test, self.y_train, self.y_test
+
+    def get_target_transformer(self):
+        """Return parameter used to transform targets
+
+        Returns:
+            scaler: parameter for transformer
+        """
+        return self.y_scaler

@@ -10,25 +10,19 @@ import torch
 from torch import optim, nn
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import TensorDataset, dataloader
+from postprocessing import Postprocessing
 
 
-def create_dir(dir_name):
-    """
-    Create directory with name dir_name
-
-    :param
-        dir_name (str) - name of the path
-    :return:
-        None
-    """
-    os.mkdir(dir_name)
-
+def weight_init(m):
+    if isinstance(m, nn.Linear):
+        nn.init.xavier_normal_(m.weight)
+        nn.init.zeros_(m.bias)
 
 def main():
     parser = argparse.ArgumentParser(description="Pytorch pipeline for regression")
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
-    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
+    parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
                         help='input batch size for testing (default: 64)')
     parser.add_argument('--epochs', type=int, default=20, metavar='N',
                         help='number of epochs to train (default: 20)')
@@ -40,15 +34,15 @@ def main():
                         help='disable CUDA training')
     parser.add_argument('--dry-run', action='store_true', default=False,
                         help='quickly check a single pass')
-    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
+    parser.add_argument('--log-interval', type=int, default=2, metavar='N',
                         help='how many batches to wait before logging training status (default: 10)')
     parser.add_argument('--save-model', action='store_true', default=False,
                         help='For Saving the current Model')
     args = parser.parse_args()
 
     # Create directory for each pass
-    dir_name = datetime.now().strftime('%Y-%d-%m %H.%M.%S')
-    create_dir(dir_name)
+    dir_name = datetime.now().strftime('%Y-%d-%m %H-%M-%S')
+    os.mkdir(dir_name)
 
     # Prepare data
     holder = Dataset(config)
@@ -63,7 +57,7 @@ def main():
         print('No CUDA device detected...\nSwitching to CPU')
         device = torch.device('cpu')
     else:
-        print('Using CUDA device {}\n'.format(torch.cuda.get_device_name()))
+        print('Using CUDA device')
         device = torch.device('cuda')
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -91,9 +85,10 @@ def main():
 
     # Define model
     model = Net(X_train.shape[1], 1).to(device)
+    model.apply(weight_init)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
-    train_loss_fn = nn.L1Loss()
-    test_loss_fn = nn.L1Loss(reduction='sum')
+    train_loss_fn = nn.L1Loss(reduction='mean')
+    test_loss_fn = nn.L1Loss()
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
@@ -102,8 +97,11 @@ def main():
         scheduler.step()
 
     if args.save_model:
-        torch.save(model.state_dict(), os.path.join(dir_name, ''))
+        torch.save(model.state_dict(), os.path.join(dir_name, 'model_param.pt'))
 
+    # Postprocessing
+    postprocess = Postprocessing(model)
+    postprocess.save_csv(X_train_torch, X_test_torch, dir_name)
 
 if __name__ == '__main__':
     main()
